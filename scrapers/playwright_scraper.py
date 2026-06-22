@@ -15,9 +15,13 @@ _DETAIL_TIMEOUT = 20000
 def _get_chromium_executable() -> Optional[str]:
     """
     Find a usable Chromium/Chrome binary.
-    Prefers system-installed chromium (Render/Linux apt install).
-    Returns None to let Playwright use its own downloaded browser.
+    On Linux/Render: always prefer system apt-installed chromium (matches chromedriver).
+    On Windows: return None so Playwright uses its own downloaded browser.
     """
+    if os.name == "nt":
+        return None  # Windows: let Playwright use its own downloaded browser
+
+    # Linux/Render: check system paths
     for candidate in [
         "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
@@ -48,8 +52,14 @@ class PlaywrightScraper(BaseScraper):
             with sync_playwright() as p:
                 launch_args = {
                     "headless": True,
-                    "args": ["--no-sandbox", "--disable-setuid-sandbox",
-                             "--disable-dev-shm-usage", "--disable-gpu"]
+                    "args": [
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        "--single-process",
+                        "--remote-debugging-port=0",
+                    ]
                 }
                 # Use system Chromium if available (Render), else Playwright's own
                 exe = _get_chromium_executable()

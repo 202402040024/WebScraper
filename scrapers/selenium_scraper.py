@@ -17,16 +17,18 @@ logger = logging.getLogger("scraper_dashboard.selenium_scraper")
 
 def _find_chromedriver() -> Optional[str]:
     """
-    Find chromedriver from system PATH first (Render/Linux),
-    then try webdriver_manager cache (Windows/local dev).
+    Find chromedriver.
+    On Linux/Render: use system chromedriver from apt (matches system chromium).
+    On Windows/local: fall back to webdriver_manager cache.
     """
-    # 1. System chromedriver (installed via apt on Render)
-    system = shutil.which("chromedriver")
-    if system:
-        logger.info(f"Using system chromedriver: {system}")
-        return system
+    # Always prefer system chromedriver on Linux — it matches the system chromium
+    if os.name != "nt":
+        system = shutil.which("chromedriver")
+        if system:
+            logger.info(f"Using system chromedriver: {system}")
+            return system
 
-    # 2. webdriver_manager cache (local dev — never triggers a download)
+    # Windows / local dev: use webdriver_manager cache
     try:
         from webdriver_manager.chrome import ChromeDriverManager
         path = ChromeDriverManager().install()
@@ -35,7 +37,26 @@ def _find_chromedriver() -> Optional[str]:
     except Exception as e:
         logger.warning(f"webdriver_manager failed: {e}")
 
+    # Last resort: PATH
+    found = shutil.which("chromedriver")
+    if found:
+        return found
+
     return None
+
+
+def _find_chrome_binary() -> Optional[str]:
+    """Find Chrome/Chromium binary. On Linux uses system apt-installed chromium."""
+    for candidate in [
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+    ]:
+        if os.path.exists(candidate):
+            logger.info(f"Using Chrome binary: {candidate}")
+            return candidate
+    return shutil.which("chromium") or shutil.which("chromium-browser")
 
 
 def _find_chrome_binary() -> Optional[str]:
@@ -59,8 +80,12 @@ def _build_driver() -> webdriver.Chrome:
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-extensions")
+    options.add_argument("--disable-setuid-sandbox")
+    options.add_argument("--single-process")
+    options.add_argument("--remote-debugging-port=0")
     options.add_argument("--window-size=1280,800")
-    options.add_experimental_option("excludeSwitches", ["enable-logging"])
+    if os.name == "nt":
+        options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
     # Use system Chrome/Chromium binary if available (Render/Linux)
     chrome_bin = _find_chrome_binary()
