@@ -21,6 +21,7 @@ from scrapers.bs4_scraper import BS4Scraper
 from scrapers.selenium_scraper import SeleniumScraper
 from scrapers.playwright_scraper import PlaywrightScraper
 from scrapers.scrapy_scraper import ScrapyScraper
+from scrapers.scrapingbee_scraper import ScrapingBeeScraper
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("scraper_dashboard.streamlit")
@@ -104,21 +105,27 @@ SCRAPER_MAP = {
     "Scrapy": "scrapy"
 }
 
+SCRAPINGBEE_KEY = os.getenv("SCRAPINGBEE_API_KEY", "")
+
 def get_scraper_instance(scraper_key: str, proxy: str = ""):
     scraper_type = SCRAPER_MAP[scraper_key]
     kwargs = {"delay": 0.5, "retries": 2}
     if proxy:
         kwargs["proxies"] = proxy
 
-    # Selenium and Playwright need a real browser binary.
-    # On Render free tier there's no Chrome — fall back to BS4 automatically.
+    # On Render (no Chrome): Selenium/Playwright use ScrapingBee if API key is set,
+    # otherwise fall back to BS4.
     if scraper_type in ("selenium", "playwright") and not BROWSER_AVAILABLE:
-        st.warning(
-            f"⚠️ **{scraper_key}** requires Chrome/Chromium which is not available on this server. "
-            f"Falling back to **BeautifulSoup (BS4)** automatically. "
-            f"To use {scraper_key}, run the app locally where Chrome is installed."
-        )
-        return BS4Scraper(**kwargs)
+        if SCRAPINGBEE_KEY:
+            st.info(f"🌐 **{scraper_key}** → using **ScrapingBee** cloud browser (no local Chrome needed)")
+            return ScrapingBeeScraper(**kwargs)
+        else:
+            st.warning(
+                f"⚠️ **{scraper_key}** needs Chrome (not available on this server). "
+                f"Add a **SCRAPINGBEE_API_KEY** env var on Render for cloud browser support, "
+                f"or use **BS4 / Scrapy** which work natively. Falling back to BS4 now."
+            )
+            return BS4Scraper(**kwargs)
 
     if scraper_type == "bs4":
         return BS4Scraper(**kwargs)
@@ -143,13 +150,13 @@ def run_scrape_task(url: str, scraper_key: str, max_pages: int, proxy: str, enab
         progress_bar.progress(30)
         items = scraper.scrape(url, max_pages=max_pages)
         progress_bar.progress(70)
-        
+
         if not items:
             st.warning("No items were scraped. Check the URL or page structure.")
             return [], 0, 0
 
         status_text.text(f"Saving {len(items)} items to database...")
-        
+
         if db.is_connected:
             inserted, errors = db.insert_products(items)
         else:
@@ -175,7 +182,10 @@ def run_scrape_task(url: str, scraper_key: str, max_pages: int, proxy: str, enab
             )
         progress_bar.progress(100)
         status_text.text("Complete!")
-        st.success(f"Scraped {len(items)} products. Saved: {inserted}, Skipped/Errors: {errors}")
+        st.success(f"✅ Scraped **{len(items)}** products. Saved: **{inserted}**, Updated: **{len(items)-inserted}**")
+        # Store in session state so analytics tab reflects new data on next render
+        st.session_state["last_scrape_count"] = len(items)
+        st.session_state["scrape_done"] = True
         return items, inserted, errors
 
     except Exception as e:
@@ -227,7 +237,10 @@ with st.sidebar:
     # Show environment capabilities
     st.markdown("<hr style='border-color: #334155;'>", unsafe_allow_html=True)
     if not BROWSER_AVAILABLE:
-        st.info("ℹ️ **Server mode**: Chrome not found. Selenium & Playwright will use BS4 fallback. Scrapy & BS4 work natively.", icon=None)
+        if SCRAPINGBEE_KEY:
+            st.success("🌐 Cloud browser ready (ScrapingBee) — all scrapers available")
+        else:
+            st.info("ℹ️ BS4 & Scrapy work here. Add SCRAPINGBEE_API_KEY for Selenium/Playwright support.")
     else:
         st.success("✅ Browser detected — all scrapers available.")
 
@@ -270,10 +283,14 @@ if scrape_btn:
     if not target_url:
         st.error("Please enter a URL.")
     else:
+        st.session_state["scrape_done"] = False
         with st.container():
-            items, inserted, errors = run_scrape_task(target_url, scraper_choice, int(max_pages), proxy_input, enable_ocr)
-        if items:
-            st.rerun()
+            run_scrape_task(target_url, scraper_choice, int(max_pages), proxy_input, enable_ocr)
+
+# Rerun AFTER showing the result so analytics tab refreshes with new data
+if st.session_state.get("scrape_done"):
+    st.session_state["scrape_done"] = False
+    st.rerun()
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([" Analytics", " Products", " Image Gallery", " Scraping Logs", "  Scheduler"])
 
