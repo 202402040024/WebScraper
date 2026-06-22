@@ -98,6 +98,32 @@ st.markdown("""
 db = MongoDBManager()
 ocr = OCRProcessor(download_dir="images")
 
+# Cache analytics with a short TTL — busted when scraping completes
+@st.cache_data(ttl=10)
+def get_analytics_cached(_cache_key: int = 0):
+    """Fetch analytics. _cache_key is incremented after each scrape to bust the cache."""
+    return db.get_analytics()
+
+@st.cache_data(ttl=10)
+def get_products_cached(limit: int, search_query: str, category: str,
+                        min_rating: float, _cache_key: int = 0):
+    kwargs = {}
+    if search_query:
+        kwargs["search_query"] = search_query
+    if category and category != "All":
+        kwargs["category"] = category
+    if min_rating:
+        kwargs["min_rating"] = min_rating
+    return db.get_products(limit=limit, **kwargs)
+
+@st.cache_data(ttl=10)
+def get_categories_cached(_cache_key: int = 0):
+    return db.get_categories()
+
+@st.cache_data(ttl=10)
+def get_logs_cached(_cache_key: int = 0):
+    return db.get_scraping_logs(limit=100)
+
 SCRAPER_MAP = {
     "BeautifulSoup (BS4)": "bs4",
     "Selenium": "selenium",
@@ -183,9 +209,14 @@ def run_scrape_task(url: str, scraper_key: str, max_pages: int, proxy: str, enab
         progress_bar.progress(100)
         status_text.text("Complete!")
         st.success(f"✅ Scraped **{len(items)}** products. Saved: **{inserted}**, Updated: **{len(items)-inserted}**")
-        # Store in session state so analytics tab reflects new data on next render
-        st.session_state["last_scrape_count"] = len(items)
+        # Bust all caches so analytics/products tabs show fresh data
+        st.session_state["cache_key"] = st.session_state.get("cache_key", 0) + 1
         st.session_state["scrape_done"] = True
+        # Clear streamlit data caches explicitly
+        get_analytics_cached.clear()
+        get_products_cached.clear()
+        get_categories_cached.clear()
+        get_logs_cached.clear()
         return items, inserted, errors
 
     except Exception as e:
@@ -251,7 +282,7 @@ with st.sidebar:
     export_btn = st.button(" Export Products", use_container_width=True)
 
     if export_btn:
-        products = db.get_products(limit=5000)
+        products = get_products_cached(5000, "", "", 0, _cache_key=st.session_state.get("cache_key", 0))
         if products:
             df = pd.DataFrame(products)
             cols = [c for c in ["name", "price", "rating", "category", "description", "product_url", "image_url", "ocr_text"] if c in df.columns]
@@ -297,7 +328,8 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([" Analytics", " Products", " Image Galle
 with tab1:
     st.markdown("<div class='section-title'> Dashboard Analytics</div>", unsafe_allow_html=True)
 
-    analytics = db.get_analytics()
+    _ck = st.session_state.get("cache_key", 0)
+    analytics = get_analytics_cached(_cache_key=_ck)
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -357,7 +389,7 @@ with tab1:
             metrics_col2.metric(" Avg Price", f"${price_stats['avg']:.2f}")
             metrics_col3.metric(" Max Price", f"${price_stats['max']:.2f}")
 
-            products_with_price = db.get_products(limit=500)
+            products_with_price = get_products_cached(500, "", "", 0, _cache_key=_ck)
             prices = [p.get("price", 0) for p in products_with_price if p.get("price", 0) > 0]
             if prices:
                 price_df = pd.DataFrame({"Price": prices})
@@ -417,11 +449,13 @@ with tab1:
 with tab2:
     st.markdown("<div class='section-title'> Product Catalog</div>", unsafe_allow_html=True)
 
+    _ck = st.session_state.get("cache_key", 0)
+
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         search_query = st.text_input(" Search", placeholder="Search products...")
     with col2:
-        categories = db.get_categories()
+        categories = get_categories_cached(_cache_key=_ck)
         cat_options = ["All"] + categories
         selected_category = st.selectbox(" Category", cat_options)
     with col3:
@@ -429,15 +463,12 @@ with tab2:
     with col4:
         sort_by = st.selectbox(" Sort By", ["Newest First", "Price: Low to High", "Price: High to Low", "Rating: High to Low"])
 
-    query_kwargs = {}
-    if search_query:
-        query_kwargs["search_query"] = search_query
-    if selected_category and selected_category != "All":
-        query_kwargs["category"] = selected_category
-    if min_r and min_r != "Any":
-        query_kwargs["min_rating"] = float(min_r)
-
-    products = db.get_products(limit=500, **query_kwargs)
+    min_rating_val = float(min_r) if min_r and min_r != "Any" else 0
+    products = get_products_cached(
+        500, search_query or "",
+        selected_category if selected_category != "All" else "",
+        min_rating_val, _cache_key=_ck
+    )
 
     if sort_by == "Price: Low to High":
         products.sort(key=lambda x: x.get("price", 0) or 0)
@@ -474,7 +505,7 @@ with tab2:
 with tab3:
     st.markdown("<div class='section-title'> Image Gallery & OCR Results</div>", unsafe_allow_html=True)
 
-    ocr_products = db.get_products(limit=200)
+    ocr_products = get_products_cached(200, "", "", 0, _cache_key=st.session_state.get("cache_key", 0))
     ocr_products = [p for p in ocr_products if p.get("image_url")]
 
     if ocr_products:
@@ -511,7 +542,7 @@ with tab3:
 with tab4:
     st.markdown("<div class='section-title'> Scraping Run History</div>", unsafe_allow_html=True)
 
-    logs = db.get_scraping_logs(limit=100)
+    logs = get_logs_cached(_cache_key=st.session_state.get("cache_key", 0))
     if logs:
         log_df = pd.DataFrame(logs)
         log_df["timestamp"] = pd.to_datetime(log_df["timestamp"]).dt.strftime("%Y-%m-%d %H:%M:%S") if "timestamp" in log_df.columns else ""
