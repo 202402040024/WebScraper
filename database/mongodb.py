@@ -64,8 +64,16 @@ class MongoDBManager:
     def connect(self) -> bool:
         """Establish connection to MongoDB."""
         try:
-            # Short timeout so Streamlit doesn't hang indefinitely if mongo is down
-            self.client = MongoClient(self.uri, serverSelectionTimeoutMS=2000)
+            # Use longer timeout on cloud (Render) — first connect can be slow
+            timeout_ms = int(os.getenv("MONGO_TIMEOUT_MS", "10000"))
+            self.client = MongoClient(
+                self.uri,
+                serverSelectionTimeoutMS=timeout_ms,
+                connectTimeoutMS=timeout_ms,
+                socketTimeoutMS=30000,
+                tls=True,
+                tlsAllowInvalidCertificates=False,
+            )
             # Trigger server_info to verify connection
             self.client.server_info()
             self.db = self.client[self.db_name]
@@ -78,10 +86,10 @@ class MongoDBManager:
             self.logs.create_index("timestamp")
             
             self.is_connected = True
-            logger.info("Successfully connected to MongoDB.")
+            logger.info(f"Successfully connected to MongoDB: {self.db_name}")
             return True
         except errors.ServerSelectionTimeoutError as e:
-            logger.error(f"Failed to connect to MongoDB: Server timeout. {e}")
+            logger.error(f"MongoDB timeout — check Atlas IP whitelist (add 0.0.0.0/0). {e}")
             self.is_connected = False
             return False
         except Exception as e:

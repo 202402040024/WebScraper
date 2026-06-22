@@ -98,6 +98,15 @@ st.markdown("""
 db = MongoDBManager()
 ocr = OCRProcessor(download_dir="images")
 
+# Show a visible error if MongoDB failed to connect on startup
+if not db.is_connected:
+    st.error(
+        "❌ **MongoDB not connected.** Scraped data cannot be saved. "
+        "Check: 1) MONGO_URI env var is set correctly on Render, "
+        "2) MongoDB Atlas → Network Access → Add IP **0.0.0.0/0** (allow all). "
+        f"URI starts with: `{db.uri[:40]}...`"
+    )
+
 # Cache analytics with a short TTL — busted when scraping completes
 @st.cache_data(ttl=10)
 def get_analytics_cached(_cache_key: int = 0):
