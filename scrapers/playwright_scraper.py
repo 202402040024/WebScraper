@@ -1,13 +1,37 @@
 import logging
+import os
+import shutil
 from urllib.parse import urljoin, urlparse
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 from .base_scraper import BaseScraper
 
 logger = logging.getLogger("scraper_dashboard.playwright_scraper")
 
-_PAGE_TIMEOUT = 30000   # 30s per page navigation
-_DETAIL_TIMEOUT = 20000 # 20s per detail page
+_PAGE_TIMEOUT = 30000
+_DETAIL_TIMEOUT = 20000
+
+
+def _get_chromium_executable() -> Optional[str]:
+    """
+    Find a usable Chromium/Chrome binary.
+    Prefers system-installed chromium (Render/Linux apt install).
+    Returns None to let Playwright use its own downloaded browser.
+    """
+    for candidate in [
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+    ]:
+        if os.path.exists(candidate):
+            logger.info(f"Using system Chromium at: {candidate}")
+            return candidate
+    found = shutil.which("chromium") or shutil.which("chromium-browser") or shutil.which("google-chrome")
+    if found:
+        logger.info(f"Using Chromium from PATH: {found}")
+        return found
+    return None
 
 
 class PlaywrightScraper(BaseScraper):
@@ -22,11 +46,17 @@ class PlaywrightScraper(BaseScraper):
         results = []
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(
-                    headless=True,
-                    args=["--no-sandbox", "--disable-setuid-sandbox",
-                          "--disable-dev-shm-usage", "--disable-gpu"]
-                )
+                launch_args = {
+                    "headless": True,
+                    "args": ["--no-sandbox", "--disable-setuid-sandbox",
+                             "--disable-dev-shm-usage", "--disable-gpu"]
+                }
+                # Use system Chromium if available (Render), else Playwright's own
+                exe = _get_chromium_executable()
+                if exe:
+                    launch_args["executable_path"] = exe
+
+                browser = p.chromium.launch(**launch_args)
                 proxy = self.get_random_proxy()
                 ctx_args: dict = {
                     "user_agent": self.get_user_agent(),

@@ -1,4 +1,6 @@
 import logging
+import os
+import shutil
 import time
 from urllib.parse import urljoin, urlparse
 from typing import Dict, List, Any, Optional
@@ -14,26 +16,43 @@ logger = logging.getLogger("scraper_dashboard.selenium_scraper")
 
 
 def _find_chromedriver() -> Optional[str]:
-    """Find chromedriver from webdriver_manager cache or system PATH."""
-    # Try webdriver_manager (but don't trigger a download — use cache only)
+    """
+    Find chromedriver from system PATH first (Render/Linux),
+    then try webdriver_manager cache (Windows/local dev).
+    """
+    # 1. System chromedriver (installed via apt on Render)
+    system = shutil.which("chromedriver")
+    if system:
+        logger.info(f"Using system chromedriver: {system}")
+        return system
+
+    # 2. webdriver_manager cache (local dev — never triggers a download)
     try:
         from webdriver_manager.chrome import ChromeDriverManager
-        from webdriver_manager.core.os_manager import ChromeType
-        import os
-        mgr = ChromeDriverManager()
-        # Use cached path only — avoids repeated network calls
-        path = mgr.install()
+        path = ChromeDriverManager().install()
+        logger.info(f"Using cached chromedriver: {path}")
         return path
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"webdriver_manager failed: {e}")
 
-    # Fall back to system chromedriver
-    import shutil
-    return shutil.which("chromedriver")
+    return None
+
+
+def _find_chrome_binary() -> Optional[str]:
+    """Find Chrome/Chromium binary for Selenium on Linux/Render."""
+    for candidate in [
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+    ]:
+        if os.path.exists(candidate):
+            return candidate
+    return shutil.which("chromium") or shutil.which("chromium-browser")
 
 
 def _build_driver() -> webdriver.Chrome:
-    """Build a headless Chrome driver, trying webdriver_manager then system chromedriver."""
+    """Build a headless Chrome driver, trying system chromedriver then webdriver_manager."""
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
@@ -43,12 +62,16 @@ def _build_driver() -> webdriver.Chrome:
     options.add_argument("--window-size=1280,800")
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
+    # Use system Chrome/Chromium binary if available (Render/Linux)
+    chrome_bin = _find_chrome_binary()
+    if chrome_bin:
+        options.binary_location = chrome_bin
+
     driver_path = _find_chromedriver()
     if driver_path:
         service = Service(executable_path=driver_path)
         driver = webdriver.Chrome(service=service, options=options)
     else:
-        # Let Selenium find chromedriver itself
         driver = webdriver.Chrome(options=options)
 
     driver.set_page_load_timeout(30)

@@ -6,10 +6,14 @@ services:
     plan: free
     region: oregon
     buildCommand: |
-      apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-eng chromium-driver chromium
+      apt-get update && apt-get install -y \
+        tesseract-ocr tesseract-ocr-eng \
+        chromium chromium-driver \
+        libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libgbm1 \
+        libasound2 libxrandr2 libxdamage1 libxcomposite1 libxfixes3
       pip install -r requirements.txt
-      playwright install chromium
-      playwright install-deps chromium
+      python -m playwright install chromium
+      python -m playwright install-deps chromium
     startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
     envVars:
       - key: MONGO_URI
@@ -20,5 +24,7 @@ services:
         value: /usr/share/tesseract-ocr/5/tessdata
       - key: TESSERACT_CMD
         value: /usr/bin/tesseract
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: /home/appuser/.cache/ms-playwright
       - key: PYTHONUNBUFFERED
         value: "1"
