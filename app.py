@@ -230,6 +230,8 @@ if scrape_btn:
     else:
         with st.container():
             items, inserted, errors = run_scrape_task(target_url, scraper_choice, int(max_pages), proxy_input, enable_ocr)
+        if items:
+            st.rerun()
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([" Analytics", " Products", " Image Gallery", " Scraping Logs", "  Scheduler"])
 
