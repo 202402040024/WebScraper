@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: web-scraper-dashboard
+    runtime: python
+    repo: https://github.com/yourusername/web_scraper_dashboard
+    plan: free
+    region: oregon
+    buildCommand: |
+      apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-eng
+      pip install -r requirements.txt
+      playwright install chromium
+      playwright install-deps
+    startCommand: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+    envVars:
+      - key: MONGO_URI
+        value: mongodb://localhost:27017
+      - key: TESSDATA_PREFIX
+        value: /usr/share/tesseract-ocr/4.00/tessdata
+      - key: STREAMLIT_SERVER_PORT
+        value: 8501
+
+  - type: web
+    name: scraper-api
+    runtime: python
+    repo: https://github.com/yourusername/web_scraper_dashboard
+    plan: free
+    region: oregon
+    buildCommand: |
+      apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-eng
+      pip install -r requirements.txt
+      playwright install chromium
+      playwright install-deps
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    envVars:
+      - key: MONGO_URI
+        value: mongodb://localhost:27017
+      - key: TESSDATA_PREFIX
+        value: /usr/share/tesseract-ocr/4.00/tessdata
