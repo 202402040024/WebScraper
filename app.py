@@ -108,39 +108,50 @@ def run_scrape_task(url: str, scraper_key: str, max_pages: int, proxy: str, enab
         progress_bar.progress(30)
         items = scraper.scrape(url, max_pages=max_pages)
         progress_bar.progress(70)
+        
+        if not items:
+            st.warning("No items were scraped. Check the URL or page structure.")
+            return [], 0, 0
+
         status_text.text(f"Saving {len(items)} items to database...")
-        if items:
+        
+        if db.is_connected:
             inserted, errors = db.insert_products(items)
-            if enable_ocr:
-                status_text.text("Running OCR on product images...")
-                for i, item in enumerate(items):
-                    if item.get("image_url"):
-                        ocr_text = ocr.process_image_url(item["image_url"])
-                        if ocr_text and db.is_connected:
-                            db.products.update_one(
-                                {"product_url": item["product_url"]},
-                                {"$set": {"ocr_text": ocr_text}}
-                            )
-                    progress_bar.progress(70 + int((i + 1) / len(items) * 20))
+        else:
+            st.warning("MongoDB not connected — results scraped but not saved.")
+            inserted, errors = 0, 0
+
+        if enable_ocr:
+            status_text.text("Running OCR on product images...")
+            for i, item in enumerate(items):
+                if item.get("image_url"):
+                    ocr_text = ocr.process_image_url(item["image_url"])
+                    if ocr_text and db.is_connected:
+                        db.products.update_one(
+                            {"product_url": item["product_url"]},
+                            {"$set": {"ocr_text": ocr_text}}
+                        )
+                progress_bar.progress(70 + int((i + 1) / len(items) * 20))
+
+        if db.is_connected:
             db.log_scraping_run(
                 url=url, scraper_type=scraper_key,
                 status="success", items_scraped=len(items)
             )
-            progress_bar.progress(100)
-            status_text.text("Complete!")
-            st.success(f"Scraped {len(items)} products successfully!")
-            return items, inserted, errors
-        else:
-            st.warning("No items were scraped. Check the URL or page structure.")
-            return [], 0, 0
+        progress_bar.progress(100)
+        status_text.text("Complete!")
+        st.success(f"Scraped {len(items)} products. Saved: {inserted}, Skipped/Errors: {errors}")
+        return items, inserted, errors
+
     except Exception as e:
         logger.error(f"Scrape failed: {e}")
         st.error(f"Scraping failed: {e}")
         try:
-            db.log_scraping_run(
-                url=url, scraper_type=scraper_key,
-                status="failed", items_scraped=0, error_msg=str(e)
-            )
+            if db.is_connected:
+                db.log_scraping_run(
+                    url=url, scraper_type=scraper_key,
+                    status="failed", items_scraped=0, error_msg=str(e)
+                )
         except Exception:
             pass
         return [], 0, 0

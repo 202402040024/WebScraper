@@ -3,11 +3,26 @@ import time
 import random
 from typing import Dict, List, Any, Optional, Union
 from urllib.parse import urlparse
-from fake_useragent import UserAgent
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("scraper_dashboard.scraper")
+
+# Fallback user agents used when fake-useragent cannot fetch its remote database
+_FALLBACK_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
+]
+
+try:
+    from fake_useragent import UserAgent
+    _UA_AVAILABLE = True
+except ImportError:
+    _UA_AVAILABLE = False
 
 class BaseScraper:
     """
@@ -28,11 +43,13 @@ class BaseScraper:
         self.backoff_factor = backoff_factor
         self.custom_ua = custom_ua
         
-        # Initialize fake-useragent
-        try:
-            self.ua_generator = UserAgent()
-        except Exception:
-            self.ua_generator = None
+        # Initialize fake-useragent with fallback
+        self.ua_generator = None
+        if _UA_AVAILABLE:
+            try:
+                self.ua_generator = UserAgent(fallback=random.choice(_FALLBACK_USER_AGENTS))
+            except Exception:
+                self.ua_generator = None
             
         # Initialize proxies
         self.proxy_list: List[str] = []
@@ -50,7 +67,8 @@ class BaseScraper:
                 return self.ua_generator.random
             except Exception:
                 pass
-        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+        # Always fall back to a hardcoded list — works on Render without network access
+        return random.choice(_FALLBACK_USER_AGENTS)
 
     def get_random_proxy(self) -> Optional[str]:
         """Returns a random proxy from the list, or None if no proxies are configured."""

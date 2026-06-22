@@ -22,6 +22,9 @@ class BS4Scraper(BaseScraper):
         def make_request():
             response = requests.get(url, headers=headers, proxies=proxies, timeout=20)
             response.raise_for_status()
+            # Detect encoding properly to avoid garbled characters (e.g. Â£ instead of £)
+            if response.encoding and response.encoding.lower() in ("iso-8859-1", "latin-1"):
+                response.encoding = response.apparent_encoding
             return response.text
 
         return self.execute_with_retry(make_request)
