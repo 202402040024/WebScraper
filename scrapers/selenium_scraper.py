@@ -59,19 +59,6 @@ def _find_chrome_binary() -> Optional[str]:
     return shutil.which("chromium") or shutil.which("chromium-browser")
 
 
-def _find_chrome_binary() -> Optional[str]:
-    """Find Chrome/Chromium binary for Selenium on Linux/Render."""
-    for candidate in [
-        "/usr/bin/chromium",
-        "/usr/bin/chromium-browser",
-        "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable",
-    ]:
-        if os.path.exists(candidate):
-            return candidate
-    return shutil.which("chromium") or shutil.which("chromium-browser")
-
-
 def _build_driver() -> webdriver.Chrome:
     """Build a headless Chrome driver, trying system chromedriver then webdriver_manager."""
     options = Options()

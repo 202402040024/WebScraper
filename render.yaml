@@ -5,26 +5,18 @@ services:
     repo: https://github.com/yourusername/web_scraper_dashboard
     plan: free
     region: oregon
-    buildCommand: |
-      apt-get update && apt-get install -y \
-        tesseract-ocr tesseract-ocr-eng \
-        chromium chromium-driver \
-        libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libgbm1 \
-        libasound2 libxrandr2 libxdamage1 libxcomposite1 libxfixes3
-      pip install -r requirements.txt
-      python -m playwright install chromium
-      python -m playwright install-deps chromium
+    buildCommand: bash build.sh
     startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
     envVars:
       - key: MONGO_URI
         value: mongodb+srv://sakshi_db_user:KUwt9KQgBxxfgQLx@cluster7.euszxtv.mongodb.net/
       - key: DATABASE_NAME
         value: scraper_dashboard
-      - key: TESSDATA_PREFIX
-        value: /usr/share/tesseract-ocr/5/tessdata
       - key: TESSERACT_CMD
         value: /usr/bin/tesseract
-      - key: PLAYWRIGHT_BROWSERS_PATH
-        value: /home/appuser/.cache/ms-playwright
+      - key: TESSDATA_PREFIX
+        value: /usr/share/tesseract-ocr/5/tessdata
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: /opt/render/project/.playwright

@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import json
 import os
 import sys
+import shutil
 import logging
 from datetime import datetime
 from io import BytesIO
@@ -23,6 +24,29 @@ from scrapers.scrapy_scraper import ScrapyScraper
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("scraper_dashboard.streamlit")
+
+
+def _browser_available() -> bool:
+    """Check if a usable Chrome/Chromium binary exists on this system."""
+    for candidate in [
+        "/usr/bin/chromium", "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",
+    ]:
+        if os.path.exists(candidate):
+            return True
+    if shutil.which("chromium") or shutil.which("chromium-browser") or shutil.which("google-chrome"):
+        return True
+    # Windows: check for Chrome in common install paths
+    if os.name == "nt":
+        win_paths = [
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        ]
+        return any(os.path.exists(p) for p in win_paths)
+    return False
+
+
+BROWSER_AVAILABLE = _browser_available()
 
 st.set_page_config(
     page_title="Web Scraper Dashboard",
@@ -85,6 +109,17 @@ def get_scraper_instance(scraper_key: str, proxy: str = ""):
     kwargs = {"delay": 0.5, "retries": 2}
     if proxy:
         kwargs["proxies"] = proxy
+
+    # Selenium and Playwright need a real browser binary.
+    # On Render free tier there's no Chrome — fall back to BS4 automatically.
+    if scraper_type in ("selenium", "playwright") and not BROWSER_AVAILABLE:
+        st.warning(
+            f"⚠️ **{scraper_key}** requires Chrome/Chromium which is not available on this server. "
+            f"Falling back to **BeautifulSoup (BS4)** automatically. "
+            f"To use {scraper_key}, run the app locally where Chrome is installed."
+        )
+        return BS4Scraper(**kwargs)
+
     if scraper_type == "bs4":
         return BS4Scraper(**kwargs)
     elif scraper_type == "selenium":
@@ -188,6 +223,13 @@ with st.sidebar:
     st.markdown("<hr style='border-color: #334155;'>", unsafe_allow_html=True)
 
     scrape_btn = st.button(" Start Scraping", use_container_width=True)
+
+    # Show environment capabilities
+    st.markdown("<hr style='border-color: #334155;'>", unsafe_allow_html=True)
+    if not BROWSER_AVAILABLE:
+        st.info("ℹ️ **Server mode**: Chrome not found. Selenium & Playwright will use BS4 fallback. Scrapy & BS4 work natively.", icon=None)
+    else:
+        st.success("✅ Browser detected — all scrapers available.")
 
     st.markdown("<hr style='border-color: #334155;'>", unsafe_allow_html=True)
 
