@@ -107,13 +107,9 @@ if not db.is_connected:
         f"URI starts with: `{db.uri[:40]}...`"
     )
 
-# Cache analytics with a short TTL — busted when scraping completes
-@st.cache_data(ttl=10)
 def get_analytics_cached(_cache_key: int = 0):
-    """Fetch analytics. _cache_key is incremented after each scrape to bust the cache."""
     return db.get_analytics()
 
-@st.cache_data(ttl=10)
 def get_products_cached(limit: int, search_query: str, category: str,
                         min_rating: float, _cache_key: int = 0):
     kwargs = {}
@@ -125,11 +121,9 @@ def get_products_cached(limit: int, search_query: str, category: str,
         kwargs["min_rating"] = min_rating
     return db.get_products(limit=limit, **kwargs)
 
-@st.cache_data(ttl=10)
 def get_categories_cached(_cache_key: int = 0):
     return db.get_categories()
 
-@st.cache_data(ttl=10)
 def get_logs_cached(_cache_key: int = 0):
     return db.get_scraping_logs(limit=100)
 
@@ -218,14 +212,7 @@ def run_scrape_task(url: str, scraper_key: str, max_pages: int, proxy: str, enab
         progress_bar.progress(100)
         status_text.text("Complete!")
         st.success(f"✅ Scraped **{len(items)}** products. Saved: **{inserted}**, Updated: **{len(items)-inserted}**")
-        # Bust all caches so analytics/products tabs show fresh data
-        st.session_state["cache_key"] = st.session_state.get("cache_key", 0) + 1
         st.session_state["scrape_done"] = True
-        # Clear streamlit data caches explicitly
-        get_analytics_cached.clear()
-        get_products_cached.clear()
-        get_categories_cached.clear()
-        get_logs_cached.clear()
         return items, inserted, errors
 
     except Exception as e:
