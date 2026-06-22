@@ -8,6 +8,9 @@ import sys
 import logging
 from datetime import datetime
 from io import BytesIO
+from dotenv import load_dotenv
+
+load_dotenv()  # loads .env locally; no-op on Render where env vars are set directly
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -206,7 +209,7 @@ with st.sidebar:
 
     st.markdown("<hr style='border-color: #334155;'>", unsafe_allow_html=True)
     st.caption(f"DB Status: {' Connected' if db.is_connected else ' Disconnected'}")
-    tesseract_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    tesseract_path = os.getenv("TESSERACT_CMD", r'C:\Program Files\Tesseract-OCR\tesseract.exe')
     ocr_status = ' Ready' if os.path.exists(tesseract_path) else ' Not Found'
     st.caption(f"OCR Engine: {ocr_status}")
 

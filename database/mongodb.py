@@ -50,9 +50,9 @@ def clean_rating(rating_val: Any) -> float:
 class MongoDBManager:
     """Manages MongoDB connections, collection operations, data retrieval, and analytics."""
 
-    def __init__(self, uri: Optional[str] = None, db_name: str = "web_scraper_db"):
+    def __init__(self, uri: Optional[str] = None, db_name: str = None):
         self.uri = uri or os.getenv("MONGO_URI", "mongodb://localhost:27017")
-        self.db_name = db_name
+        self.db_name = db_name or os.getenv("DATABASE_NAME", "web_scraper_db")
         self.client: Optional[MongoClient] = None
         self.db = None
         self.products: Optional[Collection] = None

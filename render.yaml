@@ -6,33 +6,19 @@ services:
     plan: free
     region: oregon
     buildCommand: |
-      apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-eng
+      apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-eng chromium-driver chromium
       pip install -r requirements.txt
       playwright install chromium
-      playwright install-deps
-    startCommand: streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+      playwright install-deps chromium
+    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
     envVars:
       - key: MONGO_URI
-        value: mongodb://localhost:27017
+        value: mongodb+srv://sakshi_db_user:KUwt9KQgBxxfgQLx@cluster7.euszxtv.mongodb.net/
+      - key: DATABASE_NAME
+        value: scraper_dashboard
       - key: TESSDATA_PREFIX
-        value: /usr/share/tesseract-ocr/4.00/tessdata
-      - key: STREAMLIT_SERVER_PORT
-        value: 8501
-
-  - type: web
-    name: scraper-api
-    runtime: python
-    repo: https://github.com/yourusername/web_scraper_dashboard
-    plan: free
-    region: oregon
-    buildCommand: |
-      apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-eng
-      pip install -r requirements.txt
-      playwright install chromium
-      playwright install-deps
-    startCommand: uvicorn api.main:app --host 0.0.0.0 --port 8000
-    envVars:
-      - key: MONGO_URI
-        value: mongodb://localhost:27017
-      - key: TESSDATA_PREFIX
-        value: /usr/share/tesseract-ocr/4.00/tessdata
+        value: /usr/share/tesseract-ocr/5/tessdata
+      - key: TESSERACT_CMD
+        value: /usr/bin/tesseract
+      - key: PYTHONUNBUFFERED
+        value: "1"
