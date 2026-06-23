@@ -57,7 +57,6 @@ class PlaywrightScraper(BaseScraper):
                         "--disable-setuid-sandbox",
                         "--disable-dev-shm-usage",
                         "--disable-gpu",
-                        "--single-process",
                         "--remote-debugging-port=0",
                     ]
                 }

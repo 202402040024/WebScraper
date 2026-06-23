@@ -68,7 +68,6 @@ def _build_driver() -> webdriver.Chrome:
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-setuid-sandbox")
-    options.add_argument("--single-process")
     options.add_argument("--remote-debugging-port=0")
     options.add_argument("--window-size=1280,800")
     if os.name == "nt":

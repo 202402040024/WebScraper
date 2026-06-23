@@ -180,6 +180,10 @@ def run_scrape_task(url: str, scraper_key: str, max_pages: int, proxy: str, enab
         items = scraper.scrape(url, max_pages=max_pages)
         progress_bar.progress(70)
 
+        # Apply the 20 products limit
+        if items and len(items) > 20:
+            items = items[:20]
+
         if not items:
             st.warning("No items were scraped. Check the URL or page structure.")
             return [], 0, 0
@@ -213,6 +217,7 @@ def run_scrape_task(url: str, scraper_key: str, max_pages: int, proxy: str, enab
         status_text.text("Complete!")
         st.success(f"✅ Scraped **{len(items)}** products. Saved: **{inserted}**, Updated: **{len(items)-inserted}**")
         st.session_state["scrape_done"] = True
+        st.session_state["cache_key"] = st.session_state.get("cache_key", 0) + 1
         return items, inserted, errors
 
     except Exception as e:
@@ -475,13 +480,15 @@ with tab2:
 
     if products:
         df_display = pd.DataFrame(products)
-        display_cols = ["name", "price", "rating", "category", "scraper_type", "product_url"]
+        display_cols = ["name", "price", "rating", "category", "scraper_type", "updated_at", "product_url"]
         available = [c for c in display_cols if c in df_display.columns]
         df_table = df_display[available].copy()
         if "price" in df_table.columns:
             df_table["price"] = df_table["price"].apply(lambda x: f"${float(x or 0):.2f}")
         if "rating" in df_table.columns:
             df_table["rating"] = df_table["rating"].apply(lambda x: f"{float(x or 0):.1f}")
+        if "updated_at" in df_table.columns:
+            df_table["updated_at"] = pd.to_datetime(df_table["updated_at"]).dt.strftime('%Y-%m-%d %H:%M:%S')
 
         st.dataframe(
             df_table,
